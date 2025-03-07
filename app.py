@@ -5,7 +5,7 @@ import torch
 import streamlit as st
 from docx import Document
 from faster_whisper import WhisperModel
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer
 
 # ----- Environment Fixes -----
 os.environ["TORCH_CPU_ONLY"] = "1"
@@ -87,28 +87,16 @@ if uploaded_audio is not None:
             if st.button("Summarize Transcript", key="summarize"):
                 with st.spinner("📝 Summarizing..."):
                     try:
+                        # Use a smaller, concise prompt
                         prompt = f"""
-### **Instructions for AI:**
-You are a **professional meeting summarizer**. Your job is to create a **detailed, multi-page summary** of the transcript below.
+Summarize the transcript below into a detailed, multi-page report (around 1000 words).
+Include:
+1. Meeting Overview
+2. Detailed Discussion Points
+3. Key Questions and Interactions
+4. Decisions and Next Steps
 
-📌 **Summary Requirements**:
-- **Expand on every discussion**, providing full details and explanations.
-- **Do NOT shorten anything**. Instead, elaborate on key points.
-- **Include at least 5 major sections**, with multiple paragraphs in each.
-- The summary should be approximately **1000 words long**.
-- **Use full paragraphs**, avoiding excessive bullet points.
-- **Each speaker’s contribution should be explained in depth**.
-
-📌 **Summary Structure**:
-1. **Meeting Overview** – Explain the purpose and participants.
-2. **Detailed Discussions** – Expand on all major points.
-3. **Key Questions Raised** – Include audience and speaker interactions.
-4. **Agreements, Disagreements, and Decisions** – Outline conclusions reached.
-5. **Next Steps & Action Items** – Define what comes next.
-
----
-
-### **Transcript for Summarization:**
+Transcript:
 {st.session_state.transcript_text}
 """
                         sum_progress = st.progress(0)
@@ -149,4 +137,4 @@ You are a **professional meeting summarizer**. Your job is to create a **detaile
         os.remove(audio_path)
 
 # ----- Footer Strapline -----
-st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>Built by Simon, powered by Tea</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>powered by Tea</p>", unsafe_allow_html=True)
