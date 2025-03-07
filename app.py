@@ -1,5 +1,6 @@
 import os
 import io
+import time
 import torch
 import streamlit as st
 from docx import Document
@@ -7,16 +8,14 @@ from faster_whisper import WhisperModel
 from transformers import pipeline
 
 # ----- Environment Fixes -----
-# Force CPU-only operation and FP32
 os.environ["TORCH_CPU_ONLY"] = "1"
 torch.set_default_dtype(torch.float32)
-
-# Ensure ffmpeg is available (adjust path if needed)
 os.environ["PATH"] += os.pathsep + "/usr/bin/"
 
-st.title("🎤 AI Audio Summarizer")
+# ----- App Title -----
+st.title("Education & Employers Audio Wizard")
 
-# Initialize session state for transcript and summary
+# Initialize session state for transcript and summary if not present
 if "transcript_text" not in st.session_state:
     st.session_state.transcript_text = None
 if "transcript_bytes" not in st.session_state:
@@ -29,8 +28,6 @@ uploaded_audio = st.file_uploader("Upload Audio File (MP3, WAV, M4A)", type=["mp
 if uploaded_audio is not None:
     audio_ext = uploaded_audio.name.split('.')[-1]
     audio_path = f"temp_audio.{audio_ext}"
-    
-    # Save the uploaded file temporarily to disk
     with open(audio_path, "wb") as f:
         f.write(uploaded_audio.read())
     st.success("✅ Audio Uploaded! Click 'Transcribe Audio' to process.")
@@ -39,13 +36,18 @@ if uploaded_audio is not None:
     if st.button("Transcribe Audio", key="transcribe"):
         with st.spinner("🔍 Transcribing..."):
             try:
-                # Initialize faster-whisper on CPU (choose "small", "medium", etc.)
+                # Create a progress bar for transcription
+                progress_bar = st.progress(0)
+                for percent in range(0, 51, 10):
+                    progress_bar.progress(percent)
+                    time.sleep(0.1)  # Simulated delay
+
                 model = WhisperModel("small", device="cpu")
                 segments, info = model.transcribe(audio_path)
                 transcript = " ".join(segment.text for segment in segments)
                 st.session_state.transcript_text = transcript
 
-                # Generate a Word document in memory for the transcript
+                # Create a Word document in memory for the transcript
                 transcript_doc = Document()
                 transcript_doc.add_heading("Audio Transcript", level=1)
                 transcript_doc.add_paragraph(transcript)
@@ -54,6 +56,8 @@ if uploaded_audio is not None:
                 transcript_buffer.seek(0)
                 st.session_state.transcript_bytes = transcript_buffer.getvalue()
 
+                # Complete progress bar update
+                progress_bar.progress(100)
                 st.success("✅ Transcription Complete!")
             except Exception as e:
                 st.error(f"❌ Error in transcription: {e}")
@@ -73,21 +77,49 @@ if uploaded_audio is not None:
             if st.button("Summarize Transcript", key="summarize"):
                 with st.spinner("📝 Summarizing..."):
                     try:
-                        prompt = (
-                            "Please create a highly detailed, multi-page summary of the following transcript. "
-                            "Ensure that the summary is at least 2000 words long, uses clear section headings and full paragraphs, "
-                            "and expands on all discussions in detail:\n\n"
-                            f"{st.session_state.transcript_text}"
-                        )
-                        # Initialize the text2text generation pipeline using google/flan-t5-large
+                        # Use your provided prompt for summarization
+                        prompt = f"""
+### **Instructions for AI:**
+You are a **professional meeting summarizer**. Your job is to create a **detailed, multi-page summary** of the transcript below.
+
+📌 **Summary Requirements**:
+- **Expand on every discussion**, providing full details and explanations.
+- **Do NOT shorten anything**. Instead, elaborate on key points.
+- **Include at least 5 major sections**, with multiple paragraphs in each.
+- The summary **must be at least 2000 words long**.
+- **Use full paragraphs**, avoiding excessive bullet points.
+- **Each speaker’s contribution should be explained in depth**.
+
+📌 **Summary Structure**:
+1. **Meeting Overview** – Explain the purpose and participants.
+2. **Detailed Discussions** – Expand on all major points.
+3. **Key Questions Raised** – Include audience and speaker interactions.
+4. **Agreements, Disagreements, and Decisions** – Outline conclusions reached.
+5. **Next Steps & Action Items** – Define what comes next.
+
+---
+
+### **Transcript for Summarization:**
+{st.session_state.transcript_text}
+"""
+                        # Create a progress bar for summarization
+                        sum_progress = st.progress(0)
+                        for percent in range(0, 51, 10):
+                            sum_progress.progress(percent)
+                            time.sleep(0.1)  # Simulated delay
+
+                        # Initialize a summarization pipeline using Flan-T5 (as an example)
                         summarizer = pipeline(
                             "text2text-generation",
                             model="google/flan-t5-large",
                             device=-1  # Use CPU
                         )
-                        # Adjust max_length and min_length as needed
                         summary_output = summarizer(prompt, max_length=2048, min_length=1000, do_sample=False)
                         summary_text = summary_output[0]['generated_text']
+
+                        for percent in range(51, 101, 10):
+                            sum_progress.progress(percent)
+                            time.sleep(0.1)
 
                         # Generate a Word document in memory for the summary
                         summary_doc = Document()
@@ -113,3 +145,6 @@ if uploaded_audio is not None:
     # ----- Cleanup: Remove temporary audio file -----
     if os.path.exists(audio_path):
         os.remove(audio_path)
+
+# ----- Footer Strapline -----
+st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>powered by Tea</p>", unsafe_allow_html=True)
