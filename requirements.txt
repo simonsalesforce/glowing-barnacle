@@ -2,7 +2,7 @@ streamlit
 python-docx
 openai-whisper
 ollama
-torch==2.0.1+cpu
-torchaudio==2.0.1+cpu
-torchvision==0.15.2+cpu
+torch
+torchaudio
+torchvision
 ffmpeg-python

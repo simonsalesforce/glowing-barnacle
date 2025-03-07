@@ -1,48 +1,44 @@
 import os
 import subprocess
-
-# ✅ Ensure `torch` is installed at runtime
-try:
-    import torch
-except ImportError:
-    subprocess.run(["pip", "install", "torch"], check=True)
-    import torch
-
+import torch
 import whisper
 import streamlit as st
-
 from docx import Document
+import ollama
 
-# ✅ Fix: Force Whisper to use CPU & FP32
+# ----- Environment Fixes -----
+# Force CPU-only operation and FP32 (whisper requires fp32 on CPU)
 os.environ["TORCH_CPU_ONLY"] = "1"
 os.environ["WHISPER_USE_FP32"] = "1"
 torch.set_default_dtype(torch.float32)
 
-# ✅ Fix: Ensure `ffmpeg` is found
+# Ensure ffmpeg is available
 os.environ["PATH"] += os.pathsep + "/usr/bin/"
 
 st.title("🎤 AI Audio Summarizer")
 
-# 🔹 Upload Audio File
+# ----- Upload Audio File -----
 uploaded_audio = st.file_uploader("Upload Audio File (MP3, WAV, M4A)", type=["mp3", "wav", "m4a"])
 if uploaded_audio is not None:
     audio_ext = uploaded_audio.name.split('.')[-1]
     audio_path = f"temp_audio.{audio_ext}"
 
-    # Save uploaded file
+    # Save uploaded file to disk
     with open(audio_path, "wb") as f:
         f.write(uploaded_audio.read())
-    st.success("✅ Audio Uploaded! Click 'Transcribe' to process.")
+    st.success("✅ Audio Uploaded! Click 'Transcribe Audio' to process.")
 
-    # 🔹 Transcribe Audio with Whisper
+    transcript_text = None  # initialize transcript_text variable
+
+    # ----- Transcribe Audio with Whisper -----
     if st.button("Transcribe Audio"):
         with st.spinner("🔍 Transcribing..."):
             try:
-                model = whisper.load_model("small")  # Change to "medium" or "large" if needed
+                model = whisper.load_model("small")  # Change to "medium" or "large" if desired
                 result = model.transcribe(audio_path)
                 transcript_text = result["text"]
 
-                # Save transcript as Word file
+                # Save transcript as a Word document
                 transcript_doc = Document()
                 transcript_doc.add_heading("Audio Transcript", level=1)
                 transcript_doc.add_paragraph(transcript_text)
@@ -55,24 +51,23 @@ if uploaded_audio is not None:
             except Exception as e:
                 st.error(f"❌ Error in transcription: {e}")
 
-    # 🔹 Summarize Transcript
-    if "transcript_text" in locals() and st.button("Summarize Transcript"):
+    # ----- Summarize Transcript -----
+    if transcript_text and st.button("Summarize Transcript"):
         with st.spinner("📝 Summarizing..."):
             try:
                 prompt = f"""
-                Convert this transcript into a **highly detailed multi-page summary**.
-                - Expand all discussions fully.
-                - Use section headings and paragraphs.
-                - Make the summary at least **2,000 words**.
+Convert this transcript into a **highly detailed multi-page summary**.
+- Expand all discussions fully.
+- Use section headings and paragraphs.
+- Make the summary at least **2,000 words**.
 
-                Transcript:
-                {transcript_text}
-                """
-
+Transcript:
+{transcript_text}
+"""
                 response = ollama.chat(model="mistral", messages=[{"role": "user", "content": prompt}])
                 summary_text = response["message"]["content"]
 
-                # Save summary as Word file
+                # Save summary as a Word document
                 summary_doc = Document()
                 summary_doc.add_heading("Meeting Summary", level=1)
                 summary_doc.add_paragraph(summary_text)
@@ -85,7 +80,7 @@ if uploaded_audio is not None:
             except Exception as e:
                 st.error(f"❌ Error in summarization: {e}")
 
-    # Clean up files after processing
+    # ----- Cleanup Temporary Files -----
     if os.path.exists(audio_path):
         os.remove(audio_path)
     if os.path.exists("audio_transcript.docx"):
