@@ -158,4 +158,4 @@ Summaries:
         os.remove(audio_path)
 
 # ----- Footer Strapline -----
-st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>powered by Tea</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>Built by Simon, powered by Tea</p>", unsafe_allow_html=True)
