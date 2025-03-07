@@ -1,13 +1,18 @@
-import streamlit as st
-import ollama
-import whisper
 import os
+import torch
+import whisper
+import streamlit as st
 from docx import Document
 
+# ✅ Fix: Force Whisper to use CPU & FP32
+os.environ["TORCH_CPU_ONLY"] = "1"
+os.environ["WHISPER_USE_FP32"] = "1"
+torch.set_default_dtype(torch.float32)
+
+# ✅ Fix: Ensure `ffmpeg` is found
 os.environ["PATH"] += os.pathsep + "/usr/bin/"
 
-
-st.title("🎤 Education and Employers Audio Transcriber")
+st.title("🎤 Education and Employers Audio Summariser")
 
 # 🔹 Upload Audio File
 uploaded_audio = st.file_uploader("Upload Audio File (MP3, WAV, M4A)", type=["mp3", "wav", "m4a"])
@@ -24,7 +29,7 @@ if uploaded_audio is not None:
     if st.button("Transcribe Audio"):
         with st.spinner("🔍 Transcribing..."):
             try:
-                model = whisper.load_model("small")  # Use Whisper-Small (change to "medium" or "large" if needed)
+                model = whisper.load_model("small")  # Change to "medium" or "large" if needed
                 result = model.transcribe(audio_path)
                 transcript_text = result["text"]
 
