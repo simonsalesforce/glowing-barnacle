@@ -21,11 +21,20 @@ def load_whisper_model(model_size="small"):
 
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
+    # Use a smaller summarization model for lower resource usage
     return pipeline(
         "text2text-generation",
-        model="google/flan-t5-large",
+        model="google/flan-t5-small",
         device=-1  # Use CPU
     )
+
+# ----- Helper Function to Chunk Text -----
+def chunk_text(text, max_words=300):
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), max_words):
+        chunks.append(" ".join(words[i:i+max_words]))
+    return chunks
 
 # ----- Initialize Session State for Outputs -----
 if "transcript_text" not in st.session_state:
@@ -87,26 +96,38 @@ if uploaded_audio is not None:
             if st.button("Summarize Transcript", key="summarize"):
                 with st.spinner("📝 Summarizing..."):
                     try:
-                        # Use a smaller, concise prompt
-                        prompt = f"""
-Summarize the transcript below into a detailed, multi-page report (around 1000 words).
+                        summarizer = load_summarizer()
+                        # Chunk the transcript to avoid resource limits
+                        chunks = chunk_text(st.session_state.transcript_text, max_words=300)
+                        chunk_summaries = []
+                        sum_progress = st.progress(0)
+                        total_chunks = len(chunks)
+                        for idx, chunk in enumerate(chunks):
+                            prompt = f"""
+Summarize the following transcript excerpt in a concise manner:
+{chunk}
+"""
+                            summary_chunk = summarizer(prompt, max_length=256, min_length=128, do_sample=False)
+                            chunk_summaries.append(summary_chunk[0]['generated_text'])
+                            sum_progress.progress(int((idx+1)/total_chunks * 50))
+                            time.sleep(0.1)
+                        
+                        # Combine individual summaries and further summarize if needed
+                        combined_summary = "\n".join(chunk_summaries)
+                        final_prompt = f"""
+Combine and refine the following summaries into a detailed, multi-page report (around 1000 words).
 Include:
 1. Meeting Overview
 2. Detailed Discussion Points
 3. Key Questions and Interactions
 4. Decisions and Next Steps
 
-Transcript:
-{st.session_state.transcript_text}
+Summaries:
+{combined_summary}
 """
-                        sum_progress = st.progress(0)
-                        for percent in range(0, 51, 10):
-                            sum_progress.progress(percent)
-                            time.sleep(0.1)
+                        final_summary_output = summarizer(final_prompt, max_length=1024, min_length=512, do_sample=False)
+                        final_summary_text = final_summary_output[0]['generated_text']
 
-                        summarizer = load_summarizer()
-                        summary_output = summarizer(prompt, max_length=1024, min_length=512, do_sample=False)
-                        summary_text = summary_output[0]['generated_text']
                         for percent in range(51, 101, 10):
                             sum_progress.progress(percent)
                             time.sleep(0.1)
@@ -114,7 +135,7 @@ Transcript:
                         # Generate a Word document in memory for the summary
                         summary_doc = Document()
                         summary_doc.add_heading("Meeting Summary", level=1)
-                        summary_doc.add_paragraph(summary_text)
+                        summary_doc.add_paragraph(final_summary_text)
                         summary_buffer = io.BytesIO()
                         summary_doc.save(summary_buffer)
                         summary_buffer.seek(0)
