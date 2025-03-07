@@ -1,7 +1,7 @@
 streamlit
 python-docx
 faster-whisper
-ollama
+transformers
 torch
 torchaudio
 torchvision
