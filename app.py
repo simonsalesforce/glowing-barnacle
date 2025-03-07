@@ -1,7 +1,16 @@
 import os
-import torch
+import subprocess
+
+# ✅ Ensure `torch` is installed at runtime
+try:
+    import torch
+except ImportError:
+    subprocess.run(["pip", "install", "torch"], check=True)
+    import torch
+
 import whisper
 import streamlit as st
+
 from docx import Document
 
 # ✅ Fix: Force Whisper to use CPU & FP32
