@@ -12,10 +12,22 @@ os.environ["TORCH_CPU_ONLY"] = "1"
 torch.set_default_dtype(torch.float32)
 os.environ["PATH"] += os.pathsep + "/usr/bin/"
 
-# ----- App Title -----
 st.title("Education & Employers Audio Wizard")
 
-# Initialize session state for transcript and summary if not present
+# ----- Caching Models -----
+@st.cache_resource(show_spinner=False)
+def load_whisper_model(model_size="small"):
+    return WhisperModel(model_size, device="cpu")
+
+@st.cache_resource(show_spinner=False)
+def load_summarizer():
+    return pipeline(
+        "text2text-generation",
+        model="google/flan-t5-large",
+        device=-1  # Use CPU
+    )
+
+# ----- Initialize Session State for Outputs -----
 if "transcript_text" not in st.session_state:
     st.session_state.transcript_text = None
 if "transcript_bytes" not in st.session_state:
@@ -32,22 +44,21 @@ if uploaded_audio is not None:
         f.write(uploaded_audio.read())
     st.success("✅ Audio Uploaded! Click 'Transcribe Audio' to process.")
 
-    # ----- Transcribe Audio with faster-whisper -----
+    # ----- Transcribe Audio using faster-whisper -----
     if st.button("Transcribe Audio", key="transcribe"):
         with st.spinner("🔍 Transcribing..."):
             try:
-                # Create a progress bar for transcription
                 progress_bar = st.progress(0)
                 for percent in range(0, 51, 10):
                     progress_bar.progress(percent)
-                    time.sleep(0.1)  # Simulated delay
+                    time.sleep(0.1)  # simulated progress
 
-                model = WhisperModel("small", device="cpu")
-                segments, info = model.transcribe(audio_path)
+                whisper_model = load_whisper_model("small")
+                segments, info = whisper_model.transcribe(audio_path)
                 transcript = " ".join(segment.text for segment in segments)
                 st.session_state.transcript_text = transcript
 
-                # Create a Word document in memory for the transcript
+                # Generate a Word document in memory for the transcript
                 transcript_doc = Document()
                 transcript_doc.add_heading("Audio Transcript", level=1)
                 transcript_doc.add_paragraph(transcript)
@@ -56,7 +67,6 @@ if uploaded_audio is not None:
                 transcript_buffer.seek(0)
                 st.session_state.transcript_bytes = transcript_buffer.getvalue()
 
-                # Complete progress bar update
                 progress_bar.progress(100)
                 st.success("✅ Transcription Complete!")
             except Exception as e:
@@ -77,7 +87,6 @@ if uploaded_audio is not None:
             if st.button("Summarize Transcript", key="summarize"):
                 with st.spinner("📝 Summarizing..."):
                     try:
-                        # Use your provided prompt for summarization
                         prompt = f"""
 ### **Instructions for AI:**
 You are a **professional meeting summarizer**. Your job is to create a **detailed, multi-page summary** of the transcript below.
@@ -102,21 +111,14 @@ You are a **professional meeting summarizer**. Your job is to create a **detaile
 ### **Transcript for Summarization:**
 {st.session_state.transcript_text}
 """
-                        # Create a progress bar for summarization
                         sum_progress = st.progress(0)
                         for percent in range(0, 51, 10):
                             sum_progress.progress(percent)
-                            time.sleep(0.1)  # Simulated delay
+                            time.sleep(0.1)
 
-                        # Initialize a summarization pipeline using Flan-T5 (as an example)
-                        summarizer = pipeline(
-                            "text2text-generation",
-                            model="google/flan-t5-large",
-                            device=-1  # Use CPU
-                        )
+                        summarizer = load_summarizer()
                         summary_output = summarizer(prompt, max_length=2048, min_length=1000, do_sample=False)
                         summary_text = summary_output[0]['generated_text']
-
                         for percent in range(51, 101, 10):
                             sum_progress.progress(percent)
                             time.sleep(0.1)
