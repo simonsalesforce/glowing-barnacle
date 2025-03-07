@@ -5,7 +5,7 @@ import torch
 import streamlit as st
 from docx import Document
 from faster_whisper import WhisperModel
-from transformers import pipeline, AutoTokenizer
+from transformers import pipeline
 
 # ----- Environment Fixes -----
 os.environ["TORCH_CPU_ONLY"] = "1"
@@ -21,7 +21,7 @@ def load_whisper_model(model_size="small"):
 
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
-    # Use a smaller summarization model for lower resource usage
+    # Consider switching to "google/flan-t5-base" if resources allow
     return pipeline(
         "text2text-generation",
         model="google/flan-t5-small",
@@ -103,29 +103,42 @@ if uploaded_audio is not None:
                         sum_progress = st.progress(0)
                         total_chunks = len(chunks)
                         for idx, chunk in enumerate(chunks):
-                            prompt = f"""
-Summarize the following transcript excerpt in a concise manner:
-{chunk}
-"""
-                            summary_chunk = summarizer(prompt, max_length=256, min_length=128, do_sample=False)
+                            # Updated prompt with more context
+                            prompt = (
+                                "Below is an excerpt from an audio transcript. "
+                                "Please extract the key discussion points, decisions, and important details in a concise paragraph.\n\n"
+                                f"Transcript excerpt:\n{chunk}"
+                            )
+                            # Adjust generation parameters: moderate temperature and sampling enabled
+                            summary_chunk = summarizer(
+                                prompt, 
+                                max_length=256, 
+                                min_length=128, 
+                                do_sample=True, 
+                                temperature=0.7
+                            )
                             chunk_summaries.append(summary_chunk[0]['generated_text'])
                             sum_progress.progress(int((idx+1)/total_chunks * 50))
                             time.sleep(0.1)
                         
-                        # Combine individual summaries and further summarize if needed
-                        combined_summary = "\n".join(chunk_summaries)
-                        final_prompt = f"""
-Combine and refine the following summaries into a detailed, multi-page report (around 1000 words).
-Include:
-1. Meeting Overview
-2. Detailed Discussion Points
-3. Key Questions and Interactions
-4. Decisions and Next Steps
-
-Summaries:
-{combined_summary}
-"""
-                        final_summary_output = summarizer(final_prompt, max_length=1024, min_length=512, do_sample=False)
+                        # Combine individual summaries and further refine the output
+                        combined_summary = "\n\n".join(chunk_summaries)
+                        final_prompt = (
+                            "Combine the following summaries into a comprehensive, detailed report of around 1000 words. "
+                            "The report should include:\n"
+                            "1. A Meeting Overview\n"
+                            "2. Detailed Discussion Points\n"
+                            "3. Key Questions and Interactions\n"
+                            "4. Decisions and Next Steps\n\n"
+                            f"Summaries:\n{combined_summary}"
+                        )
+                        final_summary_output = summarizer(
+                            final_prompt, 
+                            max_length=1024, 
+                            min_length=512, 
+                            do_sample=True, 
+                            temperature=0.7
+                        )
                         final_summary_text = final_summary_output[0]['generated_text']
 
                         for percent in range(51, 101, 10):
@@ -158,4 +171,4 @@ Summaries:
         os.remove(audio_path)
 
 # ----- Footer Strapline -----
-st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>Built by Simon, powered by Tea</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>powered by Tea</p>", unsafe_allow_html=True)
