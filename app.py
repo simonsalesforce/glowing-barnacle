@@ -12,7 +12,7 @@ torch.set_default_dtype(torch.float32)
 # ✅ Fix: Ensure `ffmpeg` is found
 os.environ["PATH"] += os.pathsep + "/usr/bin/"
 
-st.title("🎤 Education and Employers Audio Summariser")
+st.title("🎤 AI Audio Summarizer")
 
 # 🔹 Upload Audio File
 uploaded_audio = st.file_uploader("Upload Audio File (MP3, WAV, M4A)", type=["mp3", "wav", "m4a"])
