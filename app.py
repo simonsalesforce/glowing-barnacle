@@ -21,12 +21,11 @@ def load_whisper_model(model_size="small"):
 
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
-    # Use a Mistral-based instruct model for summarization.
-    # If resources allow, you might try a smaller variant.
+    # Use the TII Falcon-7B-Instruct model as an alternative instruct model.
     return pipeline(
         "text2text-generation",
-        model="mistralai/Mistral-7B-Instruct",
-        device=-1  # CPU mode
+        model="tiiuae/falcon-7b-instruct",
+        device=-1  # Use CPU
     )
 
 # ----- Initialize Session State for Outputs -----
@@ -91,10 +90,10 @@ if uploaded_audio is not None:
                     try:
                         summarizer = load_summarizer()
 
-                        # Single-step prompt for a detailed report using Mistral
+                        # Single-step prompt for a detailed report using Falcon instruct model
                         prompt = (
-                            "You are an expert meeting summarizer. Using the transcript below, generate a comprehensive, detailed report of about 1000 words. "
-                            "The report should include the following sections:\n\n"
+                            "You are an expert meeting summarizer. Using the transcript below, generate a comprehensive, detailed report "
+                            "of about 1000 words. The report should include the following sections:\n\n"
                             "1. Meeting Overview\n"
                             "2. Detailed Discussion Points\n"
                             "3. Key Questions and Interactions\n"
