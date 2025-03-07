@@ -7,6 +7,9 @@ from docx import Document
 from faster_whisper import WhisperModel
 from transformers import pipeline
 
+# Disable file watcher to avoid torch errors
+st.set_option("server.fileWatcherType", "none")
+
 # ----- Environment Fixes -----
 os.environ["TORCH_CPU_ONLY"] = "1"
 torch.set_default_dtype(torch.float32)
@@ -21,6 +24,8 @@ def load_whisper_model(model_size="small"):
 
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
+    # Optionally, you could use a smaller model for faster summarization:
+    # return pipeline("text2text-generation", model="google/flan-t5-base", device=-1)
     return pipeline(
         "text2text-generation",
         model="google/flan-t5-large",
@@ -87,6 +92,7 @@ if uploaded_audio is not None:
             if st.button("Summarize Transcript", key="summarize"):
                 with st.spinner("📝 Summarizing..."):
                     try:
+                        # Adjusted prompt: request a detailed summary of around 1000 words for speed
                         prompt = f"""
 ### **Instructions for AI:**
 You are a **professional meeting summarizer**. Your job is to create a **detailed, multi-page summary** of the transcript below.
@@ -95,7 +101,7 @@ You are a **professional meeting summarizer**. Your job is to create a **detaile
 - **Expand on every discussion**, providing full details and explanations.
 - **Do NOT shorten anything**. Instead, elaborate on key points.
 - **Include at least 5 major sections**, with multiple paragraphs in each.
-- The summary **must be at least 2000 words long**.
+- The summary should be approximately **1000 words long**.
 - **Use full paragraphs**, avoiding excessive bullet points.
 - **Each speaker’s contribution should be explained in depth**.
 
@@ -117,7 +123,8 @@ You are a **professional meeting summarizer**. Your job is to create a **detaile
                             time.sleep(0.1)
 
                         summarizer = load_summarizer()
-                        summary_output = summarizer(prompt, max_length=2048, min_length=1000, do_sample=False)
+                        # Lower max_length and min_length for faster generation
+                        summary_output = summarizer(prompt, max_length=1024, min_length=512, do_sample=False)
                         summary_text = summary_output[0]['generated_text']
                         for percent in range(51, 101, 10):
                             sum_progress.progress(percent)
@@ -149,4 +156,4 @@ You are a **professional meeting summarizer**. Your job is to create a **detaile
         os.remove(audio_path)
 
 # ----- Footer Strapline -----
-st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>powered by Tea</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>Built by Simon, powered by Tea</p>", unsafe_allow_html=True)
