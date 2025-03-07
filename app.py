@@ -21,7 +21,7 @@ def load_whisper_model(model_size="small"):
 
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
-    # Consider switching to "google/flan-t5-base" if resources allow
+    # You can experiment with a slightly larger model (e.g., "google/flan-t5-base")
     return pipeline(
         "text2text-generation",
         model="google/flan-t5-small",
@@ -97,54 +97,53 @@ if uploaded_audio is not None:
                 with st.spinner("📝 Summarizing..."):
                     try:
                         summarizer = load_summarizer()
-                        # Chunk the transcript to avoid resource limits
-                        chunks = chunk_text(st.session_state.transcript_text, max_words=300)
-                        chunk_summaries = []
-                        sum_progress = st.progress(0)
-                        total_chunks = len(chunks)
-                        for idx, chunk in enumerate(chunks):
-                            # Updated prompt with more context
-                            prompt = (
-                                "Below is an excerpt from an audio transcript. "
-                                "Please extract the key discussion points, decisions, and important details in a concise paragraph.\n\n"
-                                f"Transcript excerpt:\n{chunk}"
-                            )
-                            # Adjust generation parameters: moderate temperature and sampling enabled
-                            summary_chunk = summarizer(
-                                prompt, 
-                                max_length=256, 
-                                min_length=128, 
-                                do_sample=True, 
-                                temperature=0.7
-                            )
-                            chunk_summaries.append(summary_chunk[0]['generated_text'])
-                            sum_progress.progress(int((idx+1)/total_chunks * 50))
-                            time.sleep(0.1)
                         
-                        # Combine individual summaries and further refine the output
-                        combined_summary = "\n\n".join(chunk_summaries)
+                        # --- Step 1: Extract Key Points ---
+                        keypoints_prompt = (
+                            "Analyze the following transcript and extract key bullet points and section headers. "
+                            "The sections should include:\n"
+                            "1. Meeting Overview\n"
+                            "2. Summary of the Report\n"
+                            "3. Key Questions and Discussions\n"
+                            "4. Decisions and Next Steps\n"
+                            "5. Additional Insights\n\n"
+                            "Transcript:\n" + st.session_state.transcript_text
+                        )
+                        keypoints_output = summarizer(
+                            keypoints_prompt,
+                            max_length=512,
+                            min_length=256,
+                            do_sample=True,
+                            temperature=0.7
+                        )
+                        keypoints = keypoints_output[0]['generated_text']
+                        
+                        # --- Step 2: Expand Key Points into a Detailed Report ---
                         final_prompt = (
-                            "Combine the following summaries into a comprehensive, detailed report of around 1000 words. "
-                            "The report should include:\n"
-                            "1. A Meeting Overview\n"
+                            "Using the following bullet points and section headers as guidance, generate a comprehensive, detailed report "
+                            "of approximately 1000 words. The report should be structured into the following sections:\n"
+                            "1. Meeting Overview\n"
                             "2. Detailed Discussion Points\n"
                             "3. Key Questions and Interactions\n"
-                            "4. Decisions and Next Steps\n\n"
-                            f"Summaries:\n{combined_summary}"
+                            "4. Decisions and Next Steps\n"
+                            "5. Additional Insights and Next Steps\n\n"
+                            "Bullet Points and Sections:\n" + keypoints
                         )
                         final_summary_output = summarizer(
-                            final_prompt, 
-                            max_length=1024, 
-                            min_length=512, 
-                            do_sample=True, 
+                            final_prompt,
+                            max_length=1024,
+                            min_length=512,
+                            do_sample=True,
                             temperature=0.7
                         )
                         final_summary_text = final_summary_output[0]['generated_text']
 
-                        for percent in range(51, 101, 10):
-                            sum_progress.progress(percent)
+                        # --- Progress Simulation ---
+                        progress_bar = st.progress(0)
+                        for percent in range(0, 101, 10):
+                            progress_bar.progress(percent)
                             time.sleep(0.1)
-
+                        
                         # Generate a Word document in memory for the summary
                         summary_doc = Document()
                         summary_doc.add_heading("Meeting Summary", level=1)
