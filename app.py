@@ -14,7 +14,7 @@ torch.set_default_dtype(torch.float32)
 # Ensure ffmpeg is available (adjust path if needed)
 os.environ["PATH"] += os.pathsep + "/usr/bin/"
 
-st.title("🎤 AI Audio Summarizer")
+st.title("🎤 Education and Employers Audio Wizard")
 
 # Initialize session state for transcript and summary (if not present)
 if "transcript_text" not in st.session_state:
