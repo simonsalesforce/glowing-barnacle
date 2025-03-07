@@ -4,7 +4,7 @@ import whisper
 import os
 from docx import Document
 
-st.title("🎤 AI Audio Summarizer")
+st.title("🎤 Education and Employers Audio Transcriber")
 
 # 🔹 Upload Audio File
 uploaded_audio = st.file_uploader("Upload Audio File (MP3, WAV, M4A)", type=["mp3", "wav", "m4a"])
