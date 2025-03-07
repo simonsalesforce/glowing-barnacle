@@ -14,9 +14,9 @@ torch.set_default_dtype(torch.float32)
 # Ensure ffmpeg is available (adjust path if needed)
 os.environ["PATH"] += os.pathsep + "/usr/bin/"
 
-st.title("🎤 Education and Employers Audio Wizard")
+st.title("🎤 Education & Employers Audio Wizard")
 
-# Initialize session state for transcript and summary (if not present)
+# Initialize session state for transcript and summary
 if "transcript_text" not in st.session_state:
     st.session_state.transcript_text = None
 if "transcript_bytes" not in st.session_state:
@@ -38,13 +38,12 @@ if uploaded_audio is not None:
     if st.button("Transcribe Audio", key="transcribe"):
         with st.spinner("🔍 Transcribing..."):
             try:
-                # Initialize faster-whisper on CPU (choose "small", "medium", etc.)
                 model = WhisperModel("small", device="cpu")
                 segments, info = model.transcribe(audio_path)
                 transcript = " ".join(segment.text for segment in segments)
                 st.session_state.transcript_text = transcript
 
-                # Generate a Word document in memory
+                # Generate a Word document in memory for the transcript
                 transcript_doc = Document()
                 transcript_doc.add_heading("Audio Transcript", level=1)
                 transcript_doc.add_paragraph(transcript)
@@ -57,7 +56,7 @@ if uploaded_audio is not None:
             except Exception as e:
                 st.error(f"❌ Error in transcription: {e}")
 
-    # ----- Download Options (if transcript exists) -----
+    # ----- Options After Transcription -----
     if st.session_state.transcript_text:
         st.subheader("Transcript Options")
         col1, col2 = st.columns(2)
@@ -81,8 +80,8 @@ Convert this transcript into a **highly detailed multi-page summary**.
 Transcript:
 {st.session_state.transcript_text}
 """
-                        # Use Llama2 instead of Mistral for summarization
-                        response = ollama.chat(model="llama2", messages=[{"role": "user", "content": prompt}])
+                        # Use Mistral for summarization
+                        response = ollama.chat(model="mistral", messages=[{"role": "user", "content": prompt}])
                         summary_text = response["message"]["content"]
 
                         # Generate a Word document for the summary in memory
