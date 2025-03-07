@@ -1,6 +1,6 @@
 streamlit
 python-docx
-openai-whisper
+faster-whisper
 ollama
 torch
 torchaudio
