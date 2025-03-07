@@ -4,6 +4,9 @@ import whisper
 import os
 from docx import Document
 
+os.environ["PATH"] += os.pathsep + "/usr/bin/"
+
+
 st.title("🎤 Education and Employers Audio Transcriber")
 
 # 🔹 Upload Audio File
