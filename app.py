@@ -21,20 +21,13 @@ def load_whisper_model(model_size="small"):
 
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
-    # You can experiment with a slightly larger model (e.g., "google/flan-t5-base")
+    # Use a Mistral-based instruct model for summarization.
+    # If resources allow, you might try a smaller variant.
     return pipeline(
         "text2text-generation",
-        model="google/flan-t5-small",
-        device=-1  # Use CPU
+        model="mistralai/Mistral-7B-Instruct",
+        device=-1  # CPU mode
     )
-
-# ----- Helper Function to Chunk Text -----
-def chunk_text(text, max_words=300):
-    words = text.split()
-    chunks = []
-    for i in range(0, len(words), max_words):
-        chunks.append(" ".join(words[i:i+max_words]))
-    return chunks
 
 # ----- Initialize Session State for Outputs -----
 if "transcript_text" not in st.session_state:
@@ -97,57 +90,38 @@ if uploaded_audio is not None:
                 with st.spinner("📝 Summarizing..."):
                     try:
                         summarizer = load_summarizer()
-                        
-                        # --- Step 1: Extract Key Points ---
-                        keypoints_prompt = (
-                            "Analyze the following transcript and extract key bullet points and section headers. "
-                            "The sections should include:\n"
-                            "1. Meeting Overview\n"
-                            "2. Summary of the Report\n"
-                            "3. Key Questions and Discussions\n"
-                            "4. Decisions and Next Steps\n"
-                            "5. Additional Insights\n\n"
-                            "Transcript:\n" + st.session_state.transcript_text
-                        )
-                        keypoints_output = summarizer(
-                            keypoints_prompt,
-                            max_length=512,
-                            min_length=256,
-                            do_sample=True,
-                            temperature=0.7
-                        )
-                        keypoints = keypoints_output[0]['generated_text']
-                        
-                        # --- Step 2: Expand Key Points into a Detailed Report ---
-                        final_prompt = (
-                            "Using the following bullet points and section headers as guidance, generate a comprehensive, detailed report "
-                            "of approximately 1000 words. The report should be structured into the following sections:\n"
+
+                        # Single-step prompt for a detailed report using Mistral
+                        prompt = (
+                            "You are an expert meeting summarizer. Using the transcript below, generate a comprehensive, detailed report of about 1000 words. "
+                            "The report should include the following sections:\n\n"
                             "1. Meeting Overview\n"
                             "2. Detailed Discussion Points\n"
                             "3. Key Questions and Interactions\n"
                             "4. Decisions and Next Steps\n"
-                            "5. Additional Insights and Next Steps\n\n"
-                            "Bullet Points and Sections:\n" + keypoints
+                            "5. Additional Insights and Recommendations\n\n"
+                            "Please ensure that the report is well-structured, coherent, and provides actionable insights.\n\n"
+                            "Transcript:\n" + st.session_state.transcript_text
                         )
-                        final_summary_output = summarizer(
-                            final_prompt,
+                        summary_output = summarizer(
+                            prompt,
                             max_length=1024,
                             min_length=512,
                             do_sample=True,
                             temperature=0.7
                         )
-                        final_summary_text = final_summary_output[0]['generated_text']
+                        summary_text = summary_output[0]['generated_text']
 
-                        # --- Progress Simulation ---
+                        # Simulate progress
                         progress_bar = st.progress(0)
                         for percent in range(0, 101, 10):
                             progress_bar.progress(percent)
                             time.sleep(0.1)
-                        
+
                         # Generate a Word document in memory for the summary
                         summary_doc = Document()
                         summary_doc.add_heading("Meeting Summary", level=1)
-                        summary_doc.add_paragraph(final_summary_text)
+                        summary_doc.add_paragraph(summary_text)
                         summary_buffer = io.BytesIO()
                         summary_doc.save(summary_buffer)
                         summary_buffer.seek(0)
