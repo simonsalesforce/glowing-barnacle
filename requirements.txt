@@ -1,9 +1,11 @@
 streamlit
 python-docx
 faster-whisper
-ollama
 torch
 torchaudio
 torchvision
-ffmpeg-python
 transformers
+ffmpeg-python
+scikit-learn
+numpy
+watchdog

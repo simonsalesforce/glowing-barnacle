@@ -1,23 +1,23 @@
 import os
 import torch
 import asyncio
+import numpy as np
 import streamlit as st
 from docx import Document
-from transformers import pipeline
 from faster_whisper import WhisperModel
+from sklearn.cluster import SpectralClustering
+from transformers import pipeline
 
 # ----- Environment Fixes -----
-# Force CPU-only execution for both Torch and Whisper
 os.environ["TORCH_CPU_ONLY"] = "1"
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Disable GPU inference
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 torch.set_default_dtype(torch.float32)
 
-# Ensure Streamlit starts correctly with an event loop
 if not hasattr(asyncio, "get_running_loop"):
     asyncio.get_event_loop().close()
     asyncio.set_event_loop(asyncio.new_event_loop())
 
-st.title("🎤 AI Audio Summarizer")
+st.title("🎤 AI Audio Summarizer with Speaker Identification")
 
 # ----- Session State Initialization -----
 if "transcript_text" not in st.session_state:
@@ -34,15 +34,50 @@ if uploaded_audio is not None:
         f.write(uploaded_audio.read())
     st.success("✅ Audio Uploaded! Click 'Transcribe Audio' to process.")
 
-    # ----- Transcribe Audio with faster-whisper -----
+    # ----- Transcribe Audio with Speaker Diarization -----
     if st.button("Transcribe Audio"):
-        with st.spinner("🔍 Transcribing..."):
+        with st.spinner("🔍 Transcribing and Detecting Speakers..."):
             try:
-                # Initialize the faster-whisper model on CPU
+                # Initialize the Faster-Whisper model (CPU only)
                 model = WhisperModel("small", device="cpu", compute_type="int8")
-                segments, info = model.transcribe(audio_path)
-                transcript_text = " ".join(segment.text for segment in segments)
-                st.session_state.transcript_text = transcript_text  # store transcript in session state
+                
+                # Run transcription and extract embeddings
+                segments, info = model.transcribe(audio_path, beam_size=5, vad_filter=True, word_timestamps=True)
+                
+                embeddings = []
+                segment_texts = []
+                start_times = []
+
+                for segment in segments:
+                    if segment.embeddings is not None:
+                        embeddings.append(segment.embeddings)
+                        segment_texts.append(segment.text)
+                        start_times.append(segment.start)
+
+                # Convert embeddings to NumPy array
+                if len(embeddings) > 1:
+                    X = np.array(embeddings)
+                    
+                    # Use Spectral Clustering to differentiate speakers
+                    n_speakers = min(3, len(embeddings))  # Limit speakers to 3 to prevent excessive splits
+                    clustering = SpectralClustering(n_clusters=n_speakers, affinity='nearest_neighbors', assign_labels='kmeans')
+                    speaker_labels = clustering.fit_predict(X)
+                else:
+                    speaker_labels = [0] * len(segment_texts)
+
+                # Assign speaker labels
+                transcript_text = ""
+                speaker_mapping = {}
+
+                for i, (text, label, start) in enumerate(zip(segment_texts, speaker_labels, start_times)):
+                    speaker_id = f"Speaker {label + 1}"
+                    if speaker_id not in speaker_mapping:
+                        speaker_mapping[label] = f"Speaker {len(speaker_mapping) + 1}"
+                    speaker_name = speaker_mapping[label]
+                    
+                    transcript_text += f"{speaker_name}: {text}\n\n"
+
+                st.session_state.transcript_text = transcript_text  # Store transcript in session state
 
                 # Save the transcript to a Word document
                 transcript_doc = Document()
@@ -57,12 +92,8 @@ if uploaded_audio is not None:
             except Exception as e:
                 st.error(f"❌ Error in transcription: {e}")
 
-    # ----- Function to Chunk Transcript Text -----
+    # ----- Summarization Function -----
     def chunk_text(text, max_chunk_size=1000):
-        """
-        Splits the text into chunks of at most max_chunk_size characters,
-        trying to split at the nearest period.
-        """
         chunks = []
         while len(text) > max_chunk_size:
             chunk = text[:max_chunk_size]
@@ -76,24 +107,21 @@ if uploaded_audio is not None:
             chunks.append(text.strip())
         return chunks
 
-    # ----- Summarize Transcript using Transformers -----
+    # ----- Summarize Transcript -----
     if st.session_state.transcript_text and st.button("Summarize Transcript"):
         with st.spinner("📝 Summarizing..."):
             try:
-                # Initialize the summarization pipeline
                 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
-                # Chunk the transcript text to respect model input size limits
                 chunks = chunk_text(st.session_state.transcript_text, max_chunk_size=1000)
                 summaries = []
                 for chunk in chunks:
                     summary = summarizer(chunk, max_length=300, min_length=100, do_sample=False)
                     summaries.append(summary[0]['summary_text'])
 
-                # Combine summaries into a final summary
                 final_summary = "\n\n".join(summaries)
 
-                # Save the final summary to a Word document
+                # Save to Word document
                 summary_doc = Document()
                 summary_doc.add_heading("Meeting Summary", level=1)
                 summary_doc.add_paragraph(final_summary)
