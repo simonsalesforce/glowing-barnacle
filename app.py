@@ -21,10 +21,10 @@ def load_whisper_model(model_size="small"):
 
 @st.cache_resource(show_spinner=False)
 def load_summarizer():
-    # Use the TII Falcon-7B-Instruct model as an alternative instruct model.
+    # Using DistilBART for efficient summarization on CPU
     return pipeline(
-        "text2text-generation",
-        model="tiiuae/falcon-7b-instruct",
+        "summarization",
+        model="sshleifer/distilbart-cnn-12-6",
         device=-1  # Use CPU
     )
 
@@ -52,7 +52,7 @@ if uploaded_audio is not None:
                 progress_bar = st.progress(0)
                 for percent in range(0, 51, 10):
                     progress_bar.progress(percent)
-                    time.sleep(0.1)  # simulated progress
+                    time.sleep(0.1)  # Simulated progress
 
                 whisper_model = load_whisper_model("small")
                 segments, info = whisper_model.transcribe(audio_path)
@@ -90,26 +90,20 @@ if uploaded_audio is not None:
                     try:
                         summarizer = load_summarizer()
 
-                        # Single-step prompt for a detailed report using Falcon instruct model
-                        prompt = (
-                            "You are an expert meeting summarizer. Using the transcript below, generate a comprehensive, detailed report "
-                            "of about 1000 words. The report should include the following sections:\n\n"
-                            "1. Meeting Overview\n"
-                            "2. Detailed Discussion Points\n"
-                            "3. Key Questions and Interactions\n"
-                            "4. Decisions and Next Steps\n"
-                            "5. Additional Insights and Recommendations\n\n"
-                            "Please ensure that the report is well-structured, coherent, and provides actionable insights.\n\n"
-                            "Transcript:\n" + st.session_state.transcript_text
+                        # Shorter prompt suitable for a small model
+                        summary_prompt = (
+                            "Summarize the following transcript into key points. "
+                            "Focus on the main ideas, decisions, and next steps:\n\n"
+                            + st.session_state.transcript_text
                         )
+                        
                         summary_output = summarizer(
-                            prompt,
-                            max_length=1024,
-                            min_length=512,
-                            do_sample=True,
-                            temperature=0.7
+                            summary_prompt,
+                            max_length=500,  # Reduced to fit model limits
+                            min_length=200,  # Ensures a decent summary length
+                            do_sample=False  # No randomness, ensures consistency
                         )
-                        summary_text = summary_output[0]['generated_text']
+                        summary_text = summary_output[0]['summary_text']
 
                         # Simulate progress
                         progress_bar = st.progress(0)
