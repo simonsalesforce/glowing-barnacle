@@ -2,26 +2,47 @@ import os
 import io
 import asyncio
 import time
+import subprocess
 import torch
 import streamlit as st
 from docx import Document
 from faster_whisper import WhisperModel
 from transformers import pipeline
 
-# ----- Fix Event Loop Issue -----
+# ----- 🛠 Force Install Missing Dependencies (If Needed) -----
+try:
+    import torch
+except ImportError:
+    st.write("🚀 Installing missing dependencies... This may take a moment.")
+    subprocess.run(["pip", "install", "torch==2.2.0", "torchaudio==2.2.0", "torchvision==0.16.0"], check=True)
+    import torch  # Retry import after installation
+
+try:
+    import faster_whisper
+except ImportError:
+    subprocess.run(["pip", "install", "faster-whisper==0.9.0"], check=True)
+    import faster_whisper
+
+try:
+    import transformers
+except ImportError:
+    subprocess.run(["pip", "install", "transformers==4.38.0"], check=True)
+    import transformers
+
+# ----- 🛠 Fix Event Loop Issue -----
 try:
     asyncio.get_running_loop()
 except RuntimeError:
     asyncio.set_event_loop(asyncio.new_event_loop())
 
-# ----- Environment Fixes -----
-os.environ["TORCH_CPU_ONLY"] = "1"
-torch.set_default_dtype(torch.float32)
-os.environ["PATH"] += os.pathsep + "/usr/bin/"
+# ----- 🖥 Debugging Info -----
+st.write("🔍 Python Version:", os.popen("python --version").read().strip())
+st.write("🔍 Torch Version:", torch.__version__)
 
+# ----- 🌟 App Title -----
 st.title("Education & Employers Audio Wizard")
 
-# ----- Caching Models -----
+# ----- 📌 Caching Models -----
 @st.cache_resource(show_spinner=False)
 def load_whisper_model(model_size="small"):
     return WhisperModel(model_size, device="cpu", compute_type="float32")  # Force float32
@@ -30,7 +51,7 @@ def load_whisper_model(model_size="small"):
 def load_summarizer():
     return pipeline("summarization", model="facebook/bart-large-cnn", device=-1)
 
-# ----- Initialize Session State for Outputs -----
+# ----- 🔄 Initialize Session State for Outputs -----
 if "transcript_text" not in st.session_state:
     st.session_state.transcript_text = None
 if "transcript_bytes" not in st.session_state:
@@ -38,7 +59,7 @@ if "transcript_bytes" not in st.session_state:
 if "summary_bytes" not in st.session_state:
     st.session_state.summary_bytes = None
 
-# ----- Upload Audio File -----
+# ----- 📂 Upload Audio File -----
 uploaded_audio = st.file_uploader("Upload Audio File (MP3, WAV, M4A)", type=["mp3", "wav", "m4a"])
 if uploaded_audio is not None:
     audio_ext = uploaded_audio.name.split('.')[-1]
@@ -47,7 +68,7 @@ if uploaded_audio is not None:
         f.write(uploaded_audio.read())
     st.success("✅ Audio Uploaded! Click 'Transcribe Audio' to process.")
 
-    # ----- Transcribe Audio using faster-whisper -----
+    # ----- 🎙 Transcribe Audio using faster-whisper -----
     if st.button("Transcribe Audio", key="transcribe"):
         with st.spinner("🔍 Transcribing..."):
             try:
@@ -59,7 +80,7 @@ if uploaded_audio is not None:
             except Exception as e:
                 st.error(f"❌ Error in transcription: {e}")
 
-    # ----- Options After Transcription -----
+    # ----- ✂️ Options After Transcription -----
     if st.session_state.transcript_text:
         st.subheader("Transcript Options")
         if st.button("Summarize Transcript", key="summarize"):
@@ -78,6 +99,9 @@ if uploaded_audio is not None:
                 except Exception as e:
                     st.error(f"❌ Error in summarization: {e}")
 
-# ----- Cleanup: Remove temporary audio file -----
+# ----- 🧹 Cleanup: Remove Temporary Audio File -----
 if "audio_path" in locals() and os.path.exists(audio_path):
     os.remove(audio_path)
+
+# ----- 🔻 Footer -----
+st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>powered by Tea</p>", unsafe_allow_html=True)
