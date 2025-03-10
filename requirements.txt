@@ -6,3 +6,4 @@ torch
 torchaudio
 torchvision
 ffmpeg-python
+transformers
