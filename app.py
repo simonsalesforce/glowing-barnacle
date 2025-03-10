@@ -1,102 +1,96 @@
 import os
-import io
-import asyncio
-import time
-import subprocess
+import torch
 import streamlit as st
 from docx import Document
-from transformers import pipeline
+import ollama
 from faster_whisper import WhisperModel
 
-# 🚀 Install dependencies manually if missing
-def install_package(package):
-    try:
-        __import__(package)
-    except ImportError:
-        st.write(f"🔄 Installing {package}...")
-        subprocess.run(["pip", "install", package], check=True)
-        __import__(package)  # Retry import after installation
+# ----- Environment Fixes -----
+# Force CPU-only operation and FP32
+os.environ["TORCH_CPU_ONLY"] = "1"
+torch.set_default_dtype(torch.float32)
 
-# 🛠 Install necessary packages dynamically
-install_package("torch")
-install_package("torchaudio")
-install_package("torchvision")
+# Ensure ffmpeg is available (adjust path if needed)
+os.environ["PATH"] += os.pathsep + "/usr/bin/"
 
-import torch  # Import after installation
+st.title("🎤 AI Audio Summarizer")
 
-# 🔄 Fix Event Loop Issue
-try:
-    asyncio.get_running_loop()
-except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
-
-# 🖥 Debugging Info
-st.write("✅ Python Version:", os.popen("python --version").read().strip())
-st.write("✅ Torch Version:", torch.__version__)
-
-# 🌟 App Title
-st.title("Education & Employers Audio Wizard")
-
-# 📌 Caching Models
-@st.cache_resource(show_spinner=False)
-def load_whisper_model(model_size="small"):
-    return WhisperModel(model_size, device="cpu", compute_type="float32")  # Force float32
-
-@st.cache_resource(show_spinner=False)
-def load_summarizer():
-    return pipeline("summarization", model="facebook/bart-large-cnn", device=-1)
-
-# 🔄 Initialize Session State for Outputs
+# Initialize session state for transcript if not present
 if "transcript_text" not in st.session_state:
     st.session_state.transcript_text = None
-if "transcript_bytes" not in st.session_state:
-    st.session_state.transcript_bytes = None
-if "summary_bytes" not in st.session_state:
-    st.session_state.summary_bytes = None
 
-# 📂 Upload Audio File
+# ----- Upload Audio File -----
 uploaded_audio = st.file_uploader("Upload Audio File (MP3, WAV, M4A)", type=["mp3", "wav", "m4a"])
 if uploaded_audio is not None:
     audio_ext = uploaded_audio.name.split('.')[-1]
     audio_path = f"temp_audio.{audio_ext}"
+
+    # Save the uploaded file
     with open(audio_path, "wb") as f:
         f.write(uploaded_audio.read())
     st.success("✅ Audio Uploaded! Click 'Transcribe Audio' to process.")
 
-    # 🎙 Transcribe Audio using faster-whisper
-    if st.button("Transcribe Audio", key="transcribe"):
+    # ----- Transcribe Audio with faster-whisper -----
+    if st.button("Transcribe Audio"):
         with st.spinner("🔍 Transcribing..."):
             try:
-                whisper_model = load_whisper_model("small")
-                segments, info = whisper_model.transcribe(audio_path)
+                # Initialize faster-whisper on CPU (choose "small", "medium", etc.)
+                model = WhisperModel("small", device="cpu")
+                segments, info = model.transcribe(audio_path)
                 transcript = " ".join(segment.text for segment in segments)
                 st.session_state.transcript_text = transcript
+
+                # Save transcript as a Word document
+                transcript_doc = Document()
+                transcript_doc.add_heading("Audio Transcript", level=1)
+                transcript_doc.add_paragraph(transcript)
+                transcript_path = "audio_transcript.docx"
+                transcript_doc.save(transcript_path)
+
                 st.success("✅ Transcription Complete!")
+                st.download_button("📥 Download Transcript", open(transcript_path, "rb"), "audio_transcript.docx")
             except Exception as e:
                 st.error(f"❌ Error in transcription: {e}")
 
-    # ✂️ Options After Transcription
+    # ----- Options After Transcription -----
     if st.session_state.transcript_text:
         st.subheader("Transcript Options")
-        if st.button("Summarize Transcript", key="summarize"):
-            with st.spinner("📝 Summarizing..."):
-                try:
-                    summarizer = load_summarizer()
-                    summary_output = summarizer(
-                        st.session_state.transcript_text,
-                        max_length=min(400, len(st.session_state.transcript_text) // 2),
-                        min_length=150,
-                        do_sample=False
-                    )
-                    summary_text = summary_output[0]['summary_text']
-                    st.success("✅ Summary Generated!")
-                    st.text_area("Summary", summary_text)
-                except Exception as e:
-                    st.error(f"❌ Error in summarization: {e}")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="📥 Download Transcript",
+                data=open("audio_transcript.docx", "rb").read(),
+                file_name="audio_transcript.docx"
+            )
+        with col2:
+            if st.button("Summarize Transcript"):
+                with st.spinner("📝 Summarizing..."):
+                    try:
+                        prompt = f"""
+Convert this transcript into a **highly detailed multi-page summary**.
+- Expand all discussions fully.
+- Use section headings and paragraphs.
+- Make the summary at least **2,000 words**.
 
-# 🧹 Cleanup: Remove Temporary Audio File
-if "audio_path" in locals() and os.path.exists(audio_path):
-    os.remove(audio_path)
+Transcript:
+{st.session_state.transcript_text}
+"""
+                        response = ollama.chat(model="mistral", messages=[{"role": "user", "content": prompt}])
+                        summary_text = response["message"]["content"]
 
-# 🔻 Footer
-st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>powered by Tea</p>", unsafe_allow_html=True)
+                        # Save summary as a Word document
+                        summary_doc = Document()
+                        summary_doc.add_heading("Meeting Summary", level=1)
+                        summary_doc.add_paragraph(summary_text)
+                        summary_path = "summary.docx"
+                        summary_doc.save(summary_path)
+
+                        st.success("✅ Summary Generated!")
+                        st.download_button("📥 Download Summary", open(summary_path, "rb"), "summary.docx")
+                    except Exception as e:
+                        st.error(f"❌ Error in summarization: {e}")
+
+    # ----- Cleanup Temporary Files -----
+    for filename in [audio_path, "audio_transcript.docx", "summary.docx"]:
+        if os.path.exists(filename):
+            os.remove(filename)
