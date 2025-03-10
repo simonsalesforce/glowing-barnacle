@@ -6,6 +6,7 @@ torchaudio
 torchvision
 transformers
 ffmpeg-python
+pyannote-audio
 scikit-learn
 numpy
 watchdog

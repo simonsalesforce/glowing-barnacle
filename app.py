@@ -5,8 +5,9 @@ import numpy as np
 import streamlit as st
 from docx import Document
 from faster_whisper import WhisperModel
+from pyannote.audio.pipelines.speaker_diarization import SpeakerDiarization
+from pyannote.audio import Model
 from sklearn.cluster import SpectralClustering
-from transformers import pipeline
 
 # ----- Environment Fixes -----
 os.environ["TORCH_CPU_ONLY"] = "1"
@@ -34,46 +35,44 @@ if uploaded_audio is not None:
         f.write(uploaded_audio.read())
     st.success("✅ Audio Uploaded! Click 'Transcribe Audio' to process.")
 
-    # ----- Transcribe Audio with Speaker Diarization -----
+    # ----- Transcribe Audio and Detect Speakers -----
     if st.button("Transcribe Audio"):
         with st.spinner("🔍 Transcribing and Detecting Speakers..."):
             try:
                 # Initialize the Faster-Whisper model (CPU only)
                 model = WhisperModel("small", device="cpu", compute_type="int8")
-                
-                # Run transcription and extract embeddings
                 segments, info = model.transcribe(audio_path, beam_size=5, vad_filter=True, word_timestamps=True)
                 
-                embeddings = []
                 segment_texts = []
                 start_times = []
-
                 for segment in segments:
-                    if segment.embeddings is not None:
-                        embeddings.append(segment.embeddings)
-                        segment_texts.append(segment.text)
-                        start_times.append(segment.start)
+                    segment_texts.append(segment.text)
+                    start_times.append(segment.start)
 
-                # Convert embeddings to NumPy array
-                if len(embeddings) > 1:
-                    X = np.array(embeddings)
-                    
-                    # Use Spectral Clustering to differentiate speakers
-                    n_speakers = min(3, len(embeddings))  # Limit speakers to 3 to prevent excessive splits
-                    clustering = SpectralClustering(n_clusters=n_speakers, affinity='nearest_neighbors', assign_labels='kmeans')
-                    speaker_labels = clustering.fit_predict(X)
-                else:
-                    speaker_labels = [0] * len(segment_texts)
+                # ----- Speaker Diarization with PyAnnote -----
+                st.info("🔍 Performing Speaker Diarization...")
+                
+                # Load the PyAnnote pre-trained speaker diarization model
+                diarization_model = Model.from_pretrained("pyannote/speaker-diarization")
+                pipeline = SpeakerDiarization(diarization_model)
+                
+                # Run the diarization pipeline
+                diarization_results = pipeline({"uri": "audio", "audio": audio_path})
 
-                # Assign speaker labels
+                # Extract speaker embeddings
+                speaker_labels = []
+                for segment in diarization_results.itertracks(yield_label=True):
+                    _, _, speaker = segment
+                    speaker_labels.append(speaker)
+
+                # Assign speakers to the transcript
                 transcript_text = ""
                 speaker_mapping = {}
 
-                for i, (text, label, start) in enumerate(zip(segment_texts, speaker_labels, start_times)):
-                    speaker_id = f"Speaker {label + 1}"
-                    if speaker_id not in speaker_mapping:
-                        speaker_mapping[label] = f"Speaker {len(speaker_mapping) + 1}"
-                    speaker_name = speaker_mapping[label]
+                for i, (text, speaker, start) in enumerate(zip(segment_texts, speaker_labels, start_times)):
+                    if speaker not in speaker_mapping:
+                        speaker_mapping[speaker] = f"Speaker {len(speaker_mapping) + 1}"
+                    speaker_name = speaker_mapping[speaker]
                     
                     transcript_text += f"{speaker_name}: {text}\n\n"
 
@@ -111,6 +110,7 @@ if uploaded_audio is not None:
     if st.session_state.transcript_text and st.button("Summarize Transcript"):
         with st.spinner("📝 Summarizing..."):
             try:
+                from transformers import pipeline
                 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
                 chunks = chunk_text(st.session_state.transcript_text, max_chunk_size=1000)
