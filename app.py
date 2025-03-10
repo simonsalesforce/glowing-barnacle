@@ -4,7 +4,6 @@ import asyncio
 import numpy as np
 import streamlit as st
 import librosa
-import librosa.display
 from docx import Document
 from faster_whisper import WhisperModel
 from sklearn.cluster import SpectralClustering
@@ -53,7 +52,7 @@ if uploaded_audio is not None:
                 # ----- Speaker Diarization (Lightweight Alternative) -----
                 st.info("🔍 Performing Speaker Diarization...")
 
-                # Load audio file and extract MFCC embeddings
+                # Load audio file and extract MFCC embeddings (NO librosa.display)
                 y, sr = librosa.load(audio_path, sr=16000)
                 mfcc_features = mfcc(y, sr, numcep=13, winlen=0.025, winstep=0.01)
                 
