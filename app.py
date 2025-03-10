@@ -1,17 +1,21 @@
 import os
 import torch
+import asyncio
 import streamlit as st
 from docx import Document
-from faster_whisper import WhisperModel
 from transformers import pipeline
+from faster_whisper import WhisperModel
 
 # ----- Environment Fixes -----
-# Force CPU-only operation and FP32 (faster-whisper uses torch so we want to ensure CPU mode)
+# Force CPU-only execution for both Torch and Whisper
 os.environ["TORCH_CPU_ONLY"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Disable GPU inference
 torch.set_default_dtype(torch.float32)
 
-# Ensure ffmpeg is available (adjust path if needed)
-os.environ["PATH"] += os.pathsep + "/usr/bin/"
+# Ensure Streamlit starts correctly with an event loop
+if not hasattr(asyncio, "get_running_loop"):
+    asyncio.get_event_loop().close()
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
 st.title("🎤 AI Audio Summarizer")
 
@@ -34,8 +38,8 @@ if uploaded_audio is not None:
     if st.button("Transcribe Audio"):
         with st.spinner("🔍 Transcribing..."):
             try:
-                # Initialize the faster-whisper model on CPU (choose "small", "medium", etc.)
-                model = WhisperModel("small", device="cpu")
+                # Initialize the faster-whisper model on CPU
+                model = WhisperModel("small", device="cpu", compute_type="int8")
                 segments, info = model.transcribe(audio_path)
                 transcript_text = " ".join(segment.text for segment in segments)
                 st.session_state.transcript_text = transcript_text  # store transcript in session state
@@ -76,19 +80,19 @@ if uploaded_audio is not None:
     if st.session_state.transcript_text and st.button("Summarize Transcript"):
         with st.spinner("📝 Summarizing..."):
             try:
-                # Initialize the summarization pipeline (using facebook/bart-large-cnn model)
+                # Initialize the summarization pipeline
                 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-                
+
                 # Chunk the transcript text to respect model input size limits
                 chunks = chunk_text(st.session_state.transcript_text, max_chunk_size=1000)
                 summaries = []
                 for chunk in chunks:
                     summary = summarizer(chunk, max_length=300, min_length=100, do_sample=False)
                     summaries.append(summary[0]['summary_text'])
-                
+
                 # Combine summaries into a final summary
                 final_summary = "\n\n".join(summaries)
-                
+
                 # Save the final summary to a Word document
                 summary_doc = Document()
                 summary_doc.add_heading("Meeting Summary", level=1)
