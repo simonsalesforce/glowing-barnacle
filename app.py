@@ -3,11 +3,12 @@ import torch
 import asyncio
 import numpy as np
 import streamlit as st
+import librosa
+import librosa.display
 from docx import Document
 from faster_whisper import WhisperModel
-from pyannote.audio.pipelines.speaker_diarization import SpeakerDiarization
-from pyannote.audio import Model
 from sklearn.cluster import SpectralClustering
+from python_speech_features import mfcc
 
 # ----- Environment Fixes -----
 os.environ["TORCH_CPU_ONLY"] = "1"
@@ -49,30 +50,27 @@ if uploaded_audio is not None:
                     segment_texts.append(segment.text)
                     start_times.append(segment.start)
 
-                # ----- Speaker Diarization with PyAnnote -----
+                # ----- Speaker Diarization (Lightweight Alternative) -----
                 st.info("🔍 Performing Speaker Diarization...")
-                
-                # Load the PyAnnote pre-trained speaker diarization model
-                diarization_model = Model.from_pretrained("pyannote/speaker-diarization")
-                pipeline = SpeakerDiarization(diarization_model)
-                
-                # Run the diarization pipeline
-                diarization_results = pipeline({"uri": "audio", "audio": audio_path})
 
-                # Extract speaker embeddings
-                speaker_labels = []
-                for segment in diarization_results.itertracks(yield_label=True):
-                    _, _, speaker = segment
-                    speaker_labels.append(speaker)
-
-                # Assign speakers to the transcript
+                # Load audio file and extract MFCC embeddings
+                y, sr = librosa.load(audio_path, sr=16000)
+                mfcc_features = mfcc(y, sr, numcep=13, winlen=0.025, winstep=0.01)
+                
+                # Use Spectral Clustering for speaker separation
+                num_speakers = min(3, len(mfcc_features) // 100)
+                clustering = SpectralClustering(n_clusters=num_speakers, affinity='nearest_neighbors', assign_labels='kmeans')
+                speaker_labels = clustering.fit_predict(mfcc_features[:len(segment_texts)])  # Match segment count
+                
+                # Assign speakers to transcript
                 transcript_text = ""
                 speaker_mapping = {}
 
-                for i, (text, speaker, start) in enumerate(zip(segment_texts, speaker_labels, start_times)):
-                    if speaker not in speaker_mapping:
-                        speaker_mapping[speaker] = f"Speaker {len(speaker_mapping) + 1}"
-                    speaker_name = speaker_mapping[speaker]
+                for i, (text, label, start) in enumerate(zip(segment_texts, speaker_labels, start_times)):
+                    speaker_id = f"Speaker {label + 1}"
+                    if speaker_id not in speaker_mapping:
+                        speaker_mapping[label] = f"Speaker {len(speaker_mapping) + 1}"
+                    speaker_name = speaker_mapping[label]
                     
                     transcript_text += f"{speaker_name}: {text}\n\n"
 
