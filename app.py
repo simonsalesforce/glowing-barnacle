@@ -77,10 +77,10 @@ if uploaded_audio is not None:
                     st.text_area("Summary", summary_text)
                 except Exception as e:
                     st.error(f"❌ Error in summarization: {e}")
-
 # ----- Cleanup: Remove temporary audio file -----
-if os.path.exists(audio_path):
+if "audio_path" in locals() and os.path.exists(audio_path):
     os.remove(audio_path)
+
 
 # ----- Footer -----
 st.markdown("<p style='text-align: center; font-size: 14px; color: gray;'>powered by Tea</p>", unsafe_allow_html=True)
