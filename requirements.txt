@@ -1,8 +1,8 @@
-streamlit==1.32.0
-faster-whisper==0.9.0
-transformers==4.38.0
-sentencepiece==0.1.99
-accelerate==0.26.0
-numpy==1.26.0
-pydub==0.25.1
-python-docx==0.8.11
+streamlit
+python-docx
+faster-whisper
+ollama
+torch
+torchaudio
+torchvision
+ffmpeg-python
